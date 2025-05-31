@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小狼毫候选框可视化配置</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f2f5;
+            color: #333;
+            display: flex;
+            justify-content: center;
+        }
+
+        #app {
+            display: flex;
+            gap: 20px;
+            width: 100%;
+            max-width: 1800px; 
+        }
+
+        .column {
+            background-color: #fff;
+            padding: 25px; 
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            overflow-y: auto; 
+            max-height: calc(100vh - 40px); 
+        }
+
+        .controls-column { flex: 2; }
+        .preview-column { flex: 1.5; }
+        .output-column { flex: 1.5; }
+
+        h1, h2 {
+            color: #1a2733;
+            border-bottom: 1px solid #e8e8e8;
+            padding-bottom: 10px;
+            margin-top: 0;
+        }
+        h1 { font-size: 1.8em; }
+        h2 { font-size: 1.4em; margin-bottom: 20px; }
+
+
+        fieldset {
+            border: 1px solid #d9d9d9;
+            border-radius: 4px;
+            margin-bottom: 25px; 
+            padding: 20px; 
+        }
+
+        legend {
+            font-weight: 600; 
+            color: #3a5b7e;
+            padding: 0 5px;
+        }
+
+        .control-group {
+            margin-bottom: 18px; 
+            display: flex;
+            align-items: center;
+            gap: 12px; 
+        }
+
+        .control-group label {
+            flex-basis: 220px; 
+            text-align: right;
+            color: #555;
+            font-size: 0.95em; 
+        }
+
+        .control-group input[type="text"],
+        .control-group input[type="number"],
+        .control-group input[type="color"],
+        .control-group select {
+            flex-grow: 1;
+            padding: 10px; 
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 0.95em;
+            transition: border-color 0.3s;
+        }
+        .control-group input:focus, .control-group select:focus {
+            border-color: #007bff;
+            outline: none;
+        }
+
+        .control-group input[type="checkbox"] {
+            width: auto;
+            height: 18px; 
+            width: 18px;
+        }
+        .control-group input[type="color"] {
+            min-height: 38px; 
+        }
+
+        /* Preview Box Styles */
+        #ime-mode-indicator {
+            display: inline-block;
+            background-color: var(--preview-ime-mode-bg, #007bff);
+            color: var(--preview-ime-mode-fg, #fff);
+            padding: 3px 8px; 
+            border-radius: 4px; 
+            font-size: 13px; 
+            margin-bottom: 8px; 
+            font-weight: 500;
+        }
+
+        #preview-box {
+            background-color: var(--preview-back_color, #ECEEEE);
+            border: var(--preview-border_width, 1px) solid var(--preview-border_color, #E0E0E0);
+            padding: var(--preview-margin_y, 12px) var(--preview-margin_x, 12px);
+            border-radius: var(--preview-corner_radius, 4px);
+            font-family: var(--preview-font_face, "Microsoft YaHei");
+            font-size: var(--preview-font_point, 14pt);
+            min-width: 280px; 
+            box-shadow: var(--preview-shadow_offset_x, 0px) var(--preview-shadow_offset_y, 0px) var(--preview-shadow_radius, 0px) var(--preview-shadow_color, rgba(0,0,0,0));
+            transition: all 0.2s ease-in-out;
+        }
+
+        .preedit-area {
+            display: var(--preview-preedit-area-display, none);
+            background-color: var(--preview-hilited_back_color, #d4d4d4);
+            color: var(--preview-hilited_text_color, #000000);
+            padding: 8px; 
+            margin-bottom: var(--preview-spacing, 10px);
+            border-radius: var(--preview-round_corner, 4px);
+        }
+
+        .preedit-caret {
+            display: inline-block;
+            width: 1px;
+            height: 1.2em;
+            background-color: var(--preview-hilited_text_color, #000000);
+            vertical-align: middle;
+            animation: blink 1s step-end infinite;
+        }
+
+        @keyframes blink {
+            50% { opacity: 0; }
+        }
+
+        .candidates-area {
+            display: var(--preview-candidates-display-mode, block);
+            flex-direction: var(--preview-candidates-flex-direction, column);
+        }
+        .candidates-area.horizontal-layout .candidate-item {
+             margin-right: var(--preview-candidate_spacing, 5px);
+             margin-bottom: 0;
+        }
+        .candidates-area.vertical-layout .candidate-item {
+             margin-bottom: var(--preview-candidate_spacing, 5px);
+             margin-right: 0;
+        }
+
+
+        .candidate-item {
+            display: flex;
+            align-items: var(--preview-align_type, baseline); 
+            padding: var(--preview-candidate-internal-padding, 3px) 0; 
+            color: var(--preview-candidate_text_color, #000000);
+            transition: background-color 0.2s, color 0.2s;
+        }
+
+        .candidate-item.selected {
+            background-color: var(--preview-hilited_candidate_back_color, #FA3A0A);
+            color: var(--preview-hilited_candidate_text_color, #FFFFFF);
+            border-radius: var(--preview-round_corner, 4px);
+            padding: var(--preview-hilite_padding, 2px) var(--preview-hilite_padding_x, var(--preview-hilite_padding, 2px));
+            margin-left: calc(-1 * var(--preview-hilite_padding_x, var(--preview-hilite_padding, 2px)));
+            margin-right: calc(-1 * var(--preview-hilite_padding_x, var(--preview-hilite_padding, 2px)));
+        }
+        
+        .candidate-label {
+            color: var(--preview-label_color, var(--preview-candidate_text_color, #000000));
+            font-family: var(--preview-label_font_face, var(--preview-font_face, "Microsoft YaHei"));
+            font-size: var(--preview-label_font_point, var(--preview-font_point, 14pt));
+            margin-right: var(--preview-hilite_spacing, 4px);
+            min-width: 25px; 
+            padding-left: var(--preview-hilite_padding_x, var(--preview-hilite_padding, 2px)); 
+        }
+        .candidate-item.selected .candidate-label {
+            color: var(--preview-hilited_label_color, var(--preview-hilited_candidate_text_color, #FFFFFF));
+        }
+
+        .candidate-text {
+            flex-grow: 1;
+        }
+
+        .candidate-comment {
+            color: var(--preview-comment_text_color, #777777);
+            font-family: var(--preview-comment_font_face, var(--preview-font_face, "Microsoft YaHei"));
+            font-size: var(--preview-comment_font_point, calc(var(--preview-font_point, 14pt) * 0.9));
+            margin-left: var(--preview-hilite_spacing, 4px);
+            padding-right: var(--preview-hilite_padding_x, var(--preview-hilite_padding, 2px)); 
+        }
+        .candidate-item.selected .candidate-comment {
+            color: var(--preview-hilited_comment_text_color, var(--preview-hilited_candidate_text_color, #FFFFFF));
+        }
+
+        #yaml-textarea { /* Changed ID */
+            width: calc(100% - 22px); 
+            padding: 10px;
+            border: 1px solid #d9d9d9;
+            border-radius: 4px;
+            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+            white-space: pre;
+            margin-top: 10px;
+            margin-bottom: 10px;
+            min-height: 300px; 
+            font-size: 0.85em;
+            line-height: 1.5;
+        }
+        .yaml-actions button { /* Style for buttons in this group */
+             margin-top: 5px;
+        }
+        button {
+            padding: 10px 18px; 
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+            font-size: 0.95em;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:active {
+            background-color: #004085;
+        }
+
+        .info {
+            font-size: 0.85em;
+            color: #666;
+            margin-top: 15px;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="column controls-column">
+            <h1>小狼毫配置</h1>
+
+            <fieldset>
+                <legend>全局样式 (style)</legend>
+                <div class="control-group">
+                    <label for="style-color_scheme">配色方案 (亮色):</label>
+                    <input type="text" id="style-color_scheme" v-model="config.style.color_scheme">
+                </div>
+                <div class="control-group">
+                    <label for="style-font_face">字体:</label>
+                    <input type="text" id="style-font_face" v-model="config.style.font_face">
+                </div>
+                <div class="control-group">
+                    <label for="style-font_point">字号 (pt):</label>
+                    <input type="number" id="style-font_point" v-model.number="config.style.font_point" min="6">
+                </div>
+                 <div class="control-group">
+                    <label for="style-label_font_face">标签字体:</label>
+                    <input type="text" id="style-label_font_face" v-model="config.style.label_font_face">
+                </div>
+                <div class="control-group">
+                    <label for="style-label_font_point">标签字号 (pt):</label>
+                    <input type="number" id="style-label_font_point" v-model.number="config.style.label_font_point" min="6">
+                </div>
+                 <div class="control-group">
+                    <label for="style-comment_font_face">注释字体:</label>
+                    <input type="text" id="style-comment_font_face" v-model="config.style.comment_font_face">
+                </div>
+                <div class="control-group">
+                    <label for="style-comment_font_point">注释字号 (pt):</label>
+                    <input type="number" id="style-comment_font_point" v-model.number="config.style.comment_font_point" min="6">
+                </div>
+                <div class="control-group">
+                    <label for="style-horizontal">候选项横排:</label>
+                    <input type="checkbox" id="style-horizontal" v-model="config.style.horizontal">
+                </div>
+                <div class="control-group">
+                    <label for="style-inline_preedit">行内预编辑:</label>
+                    <input type="checkbox" id="style-inline_preedit" v-model="config.style.inline_preedit">
+                </div>
+                 <div class="control-group">
+                    <label for="style-label_format">标签格式:</label>
+                    <input type="text" id="style-label_format" v-model="config.style.label_format" placeholder="%s.">
+                </div>
+            </fieldset>
+
+            <fieldset>
+                <legend>布局 (style/layout)</legend>
+                <div class="control-group">
+                    <label for="layout-corner_radius">窗口圆角半径 (px):</label>
+                    <input type="number" id="layout-corner_radius" v-model.number="config.layout.corner_radius" min="0">
+                </div>
+                <div class="control-group">
+                    <label for="layout-round_corner">高亮项圆角半径 (px):</label>
+                    <input type="number" id="layout-round_corner" v-model.number="config.layout.round_corner" min="0">
+                </div>
+                <div class="control-group">
+                    <label for="layout-border_width">边框宽度 (px):</label>
+                    <input type="number" id="layout-border_width" v-model.number="config.layout.border_width" min="0">
+                </div>
+                <div class="control-group">
+                    <label for="layout-margin_x">左右边距 (px):</label>
+                    <input type="number" id="layout-margin_x" v-model.number="config.layout.margin_x" min="0">
+                </div>
+                 <div class="control-group">
+                    <label for="layout-margin_y">上下边距 (px):</label>
+                    <input type="number" id="layout-margin_y" v-model.number="config.layout.margin_y" min="0">
+                </div>
+                <div class="control-group">
+                    <label for="layout-candidate_spacing">候选项间距 (px):</label>
+                    <input type="number" id="layout-candidate_spacing" v-model.number="config.layout.candidate_spacing" min="0">
+                </div>
+                <div class="control-group">
+                    <label for="layout-hilite_padding">高亮项内边距 (px):</label>
+                    <input type="number" id="layout-hilite_padding" v-model.number="config.layout.hilite_padding" min="0">
+                </div>
+                 <div class="control-group">
+                    <label for="layout-hilite_padding_x">高亮项左右内边距 (px):</label>
+                    <input type="number" id="layout-hilite_padding_x" v-model.number="config.layout.hilite_padding_x" min="0" placeholder="同上">
+                </div>
+                <div class="control-group">
+                    <label for="layout-hilite_spacing">高亮项与标签/注释间距 (px):</label>
+                    <input type="number" id="layout-hilite_spacing" v-model.number="config.layout.hilite_spacing" min="0">
+                </div>
+                <div class="control-group">
+                    <label for="layout-align_type">对齐方式 (标签/候选/注释):</label>
+                    <select id="layout-align_type" v-model="config.layout.align_type">
+                        <option value="top">top (顶对齐)</option>
+                        <option value="center">center (居中对齐)</option>
+                        <option value="baseline">baseline (基线对齐)</option>
+                        <option value="bottom">bottom (底对齐)</option>
+                    </select>
+                </div>
+                 <div class="control-group">
+                    <label for="layout-shadow_radius">阴影半径 (px):</label>
+                    <input type="number" id="layout-shadow_radius" v-model.number="config.layout.shadow_radius" min="0">
+                </div>
+                 <div class="control-group">
+                    <label for="layout-shadow_offset_x">阴影X偏移 (px):</label>
+                    <input type="number" id="layout-shadow_offset_x" v-model.number="config.layout.shadow_offset_x">
+                </div>
+                 <div class="control-group">
+                    <label for="layout-shadow_offset_y">阴影Y偏移 (px):</label>
+                    <input type="number" id="layout-shadow_offset_y" v-model.number="config.layout.shadow_offset_y">
+                </div>
+            </fieldset>
+
+            <fieldset>
+                <legend>配色方案编辑 (preset_color_schemes)</legend>
+                <div class="control-group">
+                    <label for="color-scheme-name">配色方案名称:</label>
+                    <input type="text" id="color-scheme-name" v-model="colorSchemeName" placeholder="e.g., my_custom_scheme">
+                </div>
+                <div class="control-group">
+                    <label for="cs-back_color">背景色:</label>
+                    <input type="color" id="cs-back_color" v-model="currentSchemeColors.back_color">
+                </div>
+                <div class="control-group">
+                    <label for="cs-text_color">文字颜色:</label>
+                    <input type="color" id="cs-text_color" v-model="currentSchemeColors.text_color">
+                </div>
+                 <div class="control-group">
+                    <label for="cs-label_color">标签颜色:</label>
+                    <input type="color" id="cs-label_color" v-model="currentSchemeColors.label_color">
+                </div>
+                 <div class="control-group">
+                    <label for="cs-comment_text_color">注释颜色:</label>
+                    <input type="color" id="cs-comment_text_color" v-model="currentSchemeColors.comment_text_color">
+                </div>
+                <div class="control-group">
+                    <label for="cs-border_color">边框颜色:</label>
+                    <input type="color" id="cs-border_color" v-model="currentSchemeColors.border_color">
+                </div>
+                 <div class="control-group">
+                    <label for="cs-shadow_color">阴影颜色:</label>
+                    <input type="color" id="cs-shadow_color" v-model="currentSchemeColors.shadow_color">
+                </div>
+                <hr>
+                <div class="control-group">
+                    <label for="cs-hilited_candidate_text_color">高亮候选文字:</label>
+                    <input type="color" id="cs-hilited_candidate_text_color" v-model="currentSchemeColors.hilited_candidate_text_color">
+                </div>
+                <div class="control-group">
+                    <label for="cs-hilited_candidate_back_color">高亮候选背景:</label>
+                    <input type="color" id="cs-hilited_candidate_back_color" v-model="currentSchemeColors.hilited_candidate_back_color">
+                </div>
+                 <div class="control-group">
+                    <label for="cs-hilited_label_color">高亮候选标签:</label>
+                    <input type="color" id="cs-hilited_label_color" v-model="currentSchemeColors.hilited_label_color">
+                </div>
+                 <div class="control-group">
+                    <label for="cs-hilited_comment_text_color">高亮候选注释:</label>
+                    <input type="color" id="cs-hilited_comment_text_color" v-model="currentSchemeColors.hilited_comment_text_color">
+                </div>
+                 <hr>
+                 <div class="control-group">
+                    <label for="cs-candidate_text_color">普通候选文字:</label> 
+                    <input type="color" id="cs-candidate_text_color" v-model="currentSchemeColors.candidate_text_color">
+                </div>
+            </fieldset>
+        </div>
+
+        <div class="column preview-column">
+            <h2>实时预览</h2>
+            <div id="ime-mode-indicator">中</div>
+            <div id="preview-box" :style="previewBoxDynamicStyles">
+                <div class="preedit-area" :style="preeditAreaDynamicStyles">
+                    <span class="preedit-text">nihao</span>
+                    <span class="preedit-caret"></span>
+                </div>
+                <div class="candidates-area" :class="candidateAreaClasses">
+                    <div class="candidate-item" v-for="(candidate, index) in dummyCandidates" :key="index" :class="{selected: candidate.selected}">
+                        <span class="candidate-label">{{ getFormattedLabel(index + 1) }}</span>
+                        <span class="candidate-text">{{ candidate.text }}</span>
+                        <span class="candidate-comment">{{ candidate.comment }}</span>
+                    </div>
+                </div>
+            </div>
+            <p class="info">注意: 此为简化版视觉预览，并非所有效果 (如特定字体渲染回退、复杂阴影、`color_format` 解释等) 均能完美复刻实际小狼毫表现。</p>
+        </div>
+
+        <div class="column output-column">
+            <h2><code>weasel.custom.yaml</code> 内容</h2>
+            <textarea id="yaml-textarea" v-model="editableYamlContent"></textarea>
+            <div class="yaml-actions">
+                <button @click="loadYamlFromTextarea">应用 YAML 内容并更新控件</button>
+                <button @click="copyYaml">复制到剪贴板</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, reactive, computed, watch, nextTick } = Vue;
+
+        // Helper function to get a deep copy of initial data for reset purposes if needed
+        const getInitialData = () => ({
+            config: {
+                style: {
+                    color_scheme: 'custom_light', 
+                    font_face: 'Microsoft YaHei, PingFang SC, sans-serif',
+                    label_font_face: '', 
+                    comment_font_face: '', 
+                    font_point: 14,
+                    label_font_point: null, 
+                    comment_font_point: null,
+                    horizontal: false,
+                    inline_preedit: false,
+                    label_format: "%s.",
+                },
+                layout: {
+                    corner_radius: 6,
+                    round_corner: 4,
+                    border_width: 1,
+                    margin_x: 10,
+                    margin_y: 10,
+                    candidate_spacing: 5,
+                    hilite_padding: 4,
+                    hilite_padding_x: null, 
+                    hilite_spacing: 5,
+                    align_type: 'baseline', 
+                    shadow_radius: 0,
+                    shadow_offset_x: 0,
+                    shadow_offset_y: 0,
+                }
+            },
+            colorSchemeName: 'custom_light', 
+            currentSchemeColors: { 
+                back_color: '#ffffff',
+                text_color: '#000000',
+                label_color: '#555555',
+                comment_text_color: '#777777',
+                border_color: '#d0d0d0',
+                shadow_color: '#00000000', 
+                hilited_candidate_text_color: '#ffffff',
+                hilited_candidate_back_color: '#007bff',
+                hilited_label_color: '#ffffff',
+                hilited_comment_text_color: '#eeeeee',
+                candidate_text_color: '#000000', 
+            }
+        });
+
+
+        createApp({
+            data() {
+                const initial = getInitialData();
+                return {
+                    config: initial.config,
+                    colorSchemeName: initial.colorSchemeName,
+                    currentSchemeColors: initial.currentSchemeColors,
+                    editableYamlContent: '', // Will be populated by generatedYamlText initially
+                    isProgrammaticChange: false, // Flag to prevent watcher feedback loops
+                    dummyCandidates: [
+                        { text: '你好', comment: 'Nǐ hǎo', selected: false },
+                        { text: '泥皓', comment: 'Ní hào', selected: true },
+                        { text: '倪浩', comment: 'Ní hào', selected: false },
+                        { text: '伱好', comment: 'Nǐ hǎo', selected: false },
+                    ]
+                };
+            },
+            computed: {
+                previewBoxDynamicStyles() {
+                    const effectiveHilitePaddingX = this.config.layout.hilite_padding_x !== null ? this.config.layout.hilite_padding_x : this.config.layout.hilite_padding;
+                    return {
+                        '--preview-font_face': this.config.style.font_face || 'sans-serif',
+                        '--preview-font_point': (this.config.style.font_point || 14) + 'pt',
+                        '--preview-label_font_face': this.config.style.label_font_face || this.config.style.font_face || 'sans-serif',
+                        '--preview-label_font_point': (this.config.style.label_font_point || this.config.style.font_point || 14) + 'pt',
+                        '--preview-comment_font_face': this.config.style.comment_font_face || this.config.style.font_face || 'sans-serif',
+                        '--preview-comment_font_point': ((this.config.style.comment_font_point || this.config.style.font_point || 14) * 0.9) + 'pt',
+
+                        '--preview-back_color': this.currentSchemeColors.back_color,
+                        '--preview-border_color': this.currentSchemeColors.border_color,
+                        '--preview-shadow_color': this.currentSchemeColors.shadow_color,
+                        '--preview-text_color': this.currentSchemeColors.text_color, 
+                        '--preview-label_color': this.currentSchemeColors.label_color,
+                        '--preview-comment_text_color': this.currentSchemeColors.comment_text_color,
+                        '--preview-candidate_text_color': this.currentSchemeColors.candidate_text_color,
+
+                        '--preview-hilited_candidate_text_color': this.currentSchemeColors.hilited_candidate_text_color,
+                        '--preview-hilited_candidate_back_color': this.currentSchemeColors.hilited_candidate_back_color,
+                        '--preview-hilited_label_color': this.currentSchemeColors.hilited_label_color,
+                        '--preview-hilited_comment_text_color': this.currentSchemeColors.hilited_comment_text_color,
+                        
+                        '--preview-hilited_back_color': this.currentSchemeColors.hilited_candidate_back_color, 
+                        '--preview-hilited_text_color': this.currentSchemeColors.hilited_candidate_text_color, 
+
+                        '--preview-corner_radius': (this.config.layout.corner_radius || 0) + 'px',
+                        '--preview-round_corner': (this.config.layout.round_corner || 0) + 'px',
+                        '--preview-border_width': (this.config.layout.border_width || 0) + 'px',
+                        '--preview-margin_x': (this.config.layout.margin_x || 0) + 'px',
+                        '--preview-margin_y': (this.config.layout.margin_y || 0) + 'px',
+                        '--preview-candidate_spacing': (this.config.layout.candidate_spacing || 0) + 'px',
+                        '--preview-hilite_padding': (this.config.layout.hilite_padding || 0) + 'px',
+                        '--preview-hilite_padding_x': (effectiveHilitePaddingX || 0) + 'px',
+                        '--preview-hilite_spacing': (this.config.layout.hilite_spacing || 0) + 'px',
+                        '--preview-align_type': this.config.layout.align_type,
+                        '--preview-shadow_radius': (this.config.layout.shadow_radius || 0) + 'px',
+                        '--preview-shadow_offset_x': (this.config.layout.shadow_offset_x || 0) + 'px',
+                        '--preview-shadow_offset_y': (this.config.layout.shadow_offset_y || 0) + 'px',
+                    };
+                },
+                preeditAreaDynamicStyles() {
+                    return {
+                        '--preview-preedit-area-display': this.config.style.inline_preedit ? 'none' : 'block',
+                        '--preview-spacing': (this.config.layout.spacing || 10) + 'px', 
+                    };
+                },
+                candidateAreaClasses() {
+                    return {
+                        'horizontal-layout': this.config.style.horizontal,
+                        'vertical-layout': !this.config.style.horizontal,
+                        '--preview-candidates-display-mode': this.config.style.horizontal ? 'flex' : 'block',
+                        '--preview-candidates-flex-direction': this.config.style.horizontal ? 'row' : 'column',
+                    };
+                },
+                generatedYamlText() {
+                    const patch = {};
+                    const initialStyleDefaults = getInitialData().config.style;
+                    const initialLayoutDefaults = getInitialData().config.layout;
+
+                    // Style section
+                    for (const key in this.config.style) {
+                        const value = this.config.style[key];
+                        // Only include if different from initial default or explicitly not null/empty for certain fields
+                        if (value !== initialStyleDefaults[key] || (value !== null && value !== '' && key === 'label_format') || (key.endsWith('_point') && value !== null) ) {
+                             if (value !== null && (value !== '' || typeof value === 'boolean' || typeof value === 'number') ) {
+                                if (!patch.style) patch.style = {};
+                                patch.style[key] = value;
+                             }
+                        }
+                    }
+
+                    // Layout section (nested under style)
+                    for (const key in this.config.layout) {
+                        const value = this.config.layout[key];
+                        if (value !== initialLayoutDefaults[key] || (value !== null && (key === 'hilite_padding_x'))) {
+                            if (value !== null && (value !== '' || typeof value === 'number') ) {
+                                if (!patch.style) patch.style = {};
+                                if (!patch.style.layout) patch.style.layout = {};
+                                patch.style.layout[key] = value;
+                            }
+                        }
+                    }
+                    
+                    // Preset Color Schemes
+                    if (this.colorSchemeName) {
+                        const schemeData = {};
+                        let hasCustomColor = false;
+                        const initialSchemeColors = getInitialData().currentSchemeColors; // For comparison
+                        for (const key in this.currentSchemeColors) {
+                            const value = this.currentSchemeColors[key];
+                            const formattedValue = this.formatColorForYaml(value);
+                            // Only include if different from initial default for that scheme
+                            if (value !== null && value !== '' && formattedValue !== this.formatColorForYaml(initialSchemeColors[key])) {
+                                schemeData[key] = formattedValue;
+                                hasCustomColor = true;
+                            } else if (value !== null && value !== '' && !initialSchemeColors.hasOwnProperty(key)) { 
+                                // Or if it's a new key not in defaults (though our model is fixed)
+                                schemeData[key] = formattedValue;
+                                hasCustomColor = true;
+                            }
+                        }
+
+                        // Always include the scheme if its name is not the default one,
+                        // or if it has custom colors, or if it's the active scheme.
+                        // The active scheme should always be outputted if it has any values.
+                        if (this.config.style.color_scheme === this.colorSchemeName && Object.keys(schemeData).length > 0) {
+                             if (!patch.preset_color_schemes) patch.preset_color_schemes = {};
+                             patch.preset_color_schemes[this.colorSchemeName] = schemeData;
+                        } else if (hasCustomColor) {
+                            if (!patch.preset_color_schemes) patch.preset_color_schemes = {};
+                            patch.preset_color_schemes[this.colorSchemeName] = schemeData;
+                        }
+                    }
+                    
+                    if (Object.keys(patch).length === 0) {
+                        return "# weasel.custom.yaml\n# (无自定义项)";
+                    }
+
+                    let yamlString = "# weasel.custom.yaml\n";
+                    yamlString += "patch:\n";
+                    yamlString += this.buildYamlStringFromObject(patch, "  ");
+                    return yamlString;
+                }
+            },
+            watch: {
+                // Watch relevant data and update editableYamlContent
+                config: {
+                    handler() {
+                        if (!this.isProgrammaticChange) {
+                            this.editableYamlContent = this.generatedYamlText;
+                        }
+                    },
+                    deep: true
+                },
+                currentSchemeColors: {
+                     handler() {
+                        if (!this.isProgrammaticChange) {
+                            this.editableYamlContent = this.generatedYamlText;
+                        }
+                    },
+                    deep: true
+                },
+                colorSchemeName() {
+                     if (!this.isProgrammaticChange) {
+                        // When scheme name changes, we might want to load its colors if they exist
+                        // or regenerate YAML. For now, just ensure YAML updates.
+                        this.editableYamlContent = this.generatedYamlText;
+                    }
+                }
+            },
+            methods: {
+                formatColorForYaml(hexColor) {
+                    if (typeof hexColor === 'string' && hexColor.startsWith('#')) {
+                        return '0x' + hexColor.substring(1);
+                    }
+                    return hexColor; 
+                },
+                convert0xToHex(val0x) {
+                    if (typeof val0x === 'string' && val0x.startsWith('0x')) {
+                        return '#' + val0x.substring(2);
+                    }
+                    return val0x;
+                },
+                buildYamlStringFromObject(obj, indent) {
+                    let str = "";
+                    for (const key in obj) {
+                        if (Object.prototype.hasOwnProperty.call(obj, key)) {
+                            const value = obj[key];
+                            if (value === null) continue; // Skip null values entirely
+                            if (value === '' && (key.endsWith('_font_face') || key === 'label_format' || key.endsWith('_point') )) continue;
+
+
+                            if (typeof value === 'object' && !Array.isArray(value)) {
+                                if (Object.keys(value).length === 0) continue; // Skip empty objects
+                                str += `${indent}"${key}":\n`;
+                                str += this.buildYamlStringFromObject(value, indent + "  ");
+                            } else {
+                                let valueStr = value;
+                                if (typeof value === 'string') {
+                                    if (!value.startsWith('0x')) { 
+                                        valueStr = `"${value.replace(/"/g, '\\"')}"`; 
+                                    }
+                                }
+                                str += `${indent}"${key}": ${valueStr}\n`;
+                            }
+                        }
+                    }
+                    return str;
+                },
+                loadYamlFromTextarea() {
+                    this.isProgrammaticChange = true;
+                    try {
+                        const parsedYaml = jsyaml.load(this.editableYamlContent);
+                        if (parsedYaml && parsedYaml.patch) {
+                            this.applyPatchToConfig(parsedYaml.patch);
+                        } else {
+                            alert('无效的 YAML 结构，未找到 "patch" 顶层键。');
+                        }
+                    } catch (e) {
+                        console.error("YAML 解析错误:", e);
+                        alert("YAML 解析失败: " + e.message);
+                    } finally {
+                        // After applying, ensure the editableYamlContent reflects the (potentially normalized) state
+                        // This will be handled by the watcher as config changes.
+                        // Forcing an immediate update of the textarea from the (now updated) config:
+                        nextTick(() => {
+                           this.editableYamlContent = this.generatedYamlText;
+                           this.isProgrammaticChange = false;
+                        });
+                    }
+                },
+                applyPatchToConfig(patch) {
+                    const initialData = getInitialData(); // Get fresh defaults
+
+                    // Temporarily set to defaults before applying patch to ensure clean slate for unspecified fields
+                    // Or, more simply, only update fields present in the patch.
+                    // For now, let's update only what's in the patch.
+
+                    if (patch.style) {
+                        for (const key in patch.style) {
+                            if (key === 'layout') continue; // Handle layout separately
+                            if (this.config.style.hasOwnProperty(key)) {
+                                this.config.style[key] = patch.style[key];
+                            }
+                        }
+                        if (patch.style.layout) {
+                            for (const key in patch.style.layout) {
+                                if (this.config.layout.hasOwnProperty(key)) {
+                                    this.config.layout[key] = patch.style.layout[key];
+                                }
+                            }
+                        }
+                    }
+
+                    // Update colorSchemeName from patch first, as it dictates which scheme to load
+                    if (patch.style && patch.style.color_scheme) {
+                        this.colorSchemeName = patch.style.color_scheme;
+                    }
+                    
+                    if (patch.preset_color_schemes) {
+                        const schemeToLoadName = this.colorSchemeName; // Use the (potentially updated) name
+                        if (patch.preset_color_schemes[schemeToLoadName]) {
+                            const schemeDataFromYaml = patch.preset_color_schemes[schemeToLoadName];
+                            // Reset currentSchemeColors to its defaults before applying new values
+                            // This ensures that colors not specified in the YAML patch for this scheme revert to defaults
+                            const defaultSchemeColors = initialData.currentSchemeColors;
+                            for (const colorKey in defaultSchemeColors) {
+                                this.currentSchemeColors[colorKey] = defaultSchemeColors[colorKey];
+                            }
+
+                            // Now apply colors from the YAML
+                            for (const colorKey in schemeDataFromYaml) {
+                                if (this.currentSchemeColors.hasOwnProperty(colorKey)) {
+                                    this.currentSchemeColors[colorKey] = this.convert0xToHex(schemeDataFromYaml[colorKey]);
+                                }
+                            }
+                        } else {
+                            // Scheme named in style.color_scheme not found in preset_color_schemes, reset to defaults
+                             Object.assign(this.currentSchemeColors, initialData.currentSchemeColors);
+                        }
+                    } else {
+                        // No preset_color_schemes in YAML, reset currentSchemeColors to defaults
+                        Object.assign(this.currentSchemeColors, initialData.currentSchemeColors);
+                    }
+                },
+                copyYaml() {
+                    navigator.clipboard.writeText(this.editableYamlContent).then(() => {
+                        alert('YAML 配置已复制到剪贴板!');
+                    }).catch(err => {
+                        console.error('无法复制到剪贴板: ', err);
+                        alert('复制失败，请手动复制。');
+                    });
+                },
+                getFormattedLabel(number) {
+                    if (this.config.style.label_format) {
+                        return this.config.style.label_format.replace("%s", number);
+                    }
+                    return number + "."; 
+                }
+            },
+            mounted() {
+                // Initial sync: generated YAML (from default data) -> editable area
+                this.editableYamlContent = this.generatedYamlText;
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
